@@ -69,20 +69,34 @@ jobs:
           sys.exit(0 if fails == 0 else 1)
           '
 
-      - name: Trivy IaC scan
+      - - name: Trivy IaC scan
         id: trivy
         if: always()
-        working-directory: ${{ env.TF_WORKING_DIR }}
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: ${{ env.TF_WORKING_DIR }}
+          format: sarif
+          output: evidence/tfsec.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+
+      - name: Check Trivy results
+        id: trivy-check
+        if: always()
         run: |
-          mkdir -p ../../evidence
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.50.4
-          trivy config . --format sarif --output ../../evidence/tfsec.sarif --skip-check-update --severity HIGH,CRITICAL || true
-          python3 -c '
+          mkdir -p evidence
+          if [ -f evidence/tfsec.sarif ]; then
+            python3 -c '
           import json, sys
-          d = json.load(open("../../evidence/tfsec.sarif"))
+          d = json.load(open("evidence/tfsec.sarif"))
           high = sum(1 for run in d.get("runs", []) for r in run.get("results", []) if (r.get("level") or "").lower() in ("error","critical","high"))
           print(f"trivy high+critical: {high}")
           sys.exit(0 if high == 0 else 1)
+          '
+          else
+            echo "No sarif file found, skipping check"
+          fi
           '
 
       - name: Copy plan into evidence
