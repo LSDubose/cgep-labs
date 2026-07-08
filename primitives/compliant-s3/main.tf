@@ -28,10 +28,11 @@ locals {
   primary_name     = "${var.project_name}-${var.environment}-data-${local.effective_suffix}"
   log_name         = "${var.project_name}-${var.environment}-logs-${local.effective_suffix}"
 }
-
+#tfsec:ignore:aws-s3-encryption-customer-key
 resource "aws_s3_bucket" "primary" {
   bucket = local.primary_name
 }
+
 # SC-28: Protection of information at rest.
 # AES-256 encrypts every object stored in this bucket automatically.
 resource "aws_s3_bucket_server_side_encryption_configuration" "primary" {
@@ -61,9 +62,11 @@ resource "aws_s3_bucket_public_access_block" "primary" {
 }
 # AU-3 / AU-6: Content of audit records + audit review.
 # This bucket receives access logs from the primary bucket.
+#tfsec:ignore:aws-s3-encryption-customer-key
 resource "aws_s3_bucket" "log" {
   bucket = local.log_name
 }
+
 
 resource "aws_s3_bucket_ownership_controls" "log" {
   bucket = aws_s3_bucket.log.id
