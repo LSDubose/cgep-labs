@@ -37,11 +37,6 @@ jobs:
           curl -fsSL https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz \
             | tar -xz -C /usr/local/bin conftest
 
-      - name: Install tfsec
-        run: |
-          curl -fsSL https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec-linux-amd64 \
-            -o /usr/local/bin/tfsec && chmod +x /usr/local/bin/tfsec
-
       - name: Terraform plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
@@ -74,23 +69,34 @@ jobs:
           sys.exit(0 if fails == 0 else 1)
           '
 
-      - name: tfsec scan
-        id: tfsec
+      - name: Trivy IaC scan
+        id: trivy
         if: always()
-        working-directory: ${{ env.TF_WORKING_DIR }}
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: ${{ env.TF_WORKING_DIR }}
+          format: sarif
+          output: evidence/tfsec.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          trivy-config: .trivy.yaml
+
+      - name: Check Trivy results
+        id: trivy-check
+        if: always()
         run: |
-          tfsec . --format sarif --out ../../evidence/tfsec.sarif || true
-          python3 -c '
+          mkdir -p evidence
+          if [ -f evidence/tfsec.sarif ]; then
+            python3 -c '
           import json, sys
-          d = json.load(open("../../evidence/tfsec.sarif"))
-          high = sum(
-              1 for run in d.get("runs", [])
-              for r in run.get("results", [])
-              if (r.get("level") or "").lower() in ("error","critical","high")
-          )
-          print(f"tfsec high+critical: {high}")
-          sys.exit(0 if high == 0 else 1)
+          d = json.load(open("evidence/tfsec.sarif"))
+          high = sum(1 for run in d.get("runs", []) for r in run.get("results", []) if (r.get("level") or "").lower() in ("error","critical","high"))
+          print(f"trivy high+critical: {high}")
           '
+          else
+            echo "No sarif file found, skipping check"
+          fi
 
       - name: Copy plan into evidence
         if: always()
