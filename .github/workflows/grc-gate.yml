@@ -80,6 +80,7 @@ jobs:
           output: evidence/tfsec.sarif
           severity: HIGH,CRITICAL
           exit-code: '0'
+          trivy-config: .trivy.yaml
 
       - name: Check Trivy results
         id: trivy-check
