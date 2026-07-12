@@ -1,0 +1,4 @@
+misconfiguration:
+  ignore:
+    - id: AVD-AWS-0132
+      reason: "AES256 SSE-S3 satisfies SC-28 encryption at rest. KMS-CMK is out of scope for this lab environment."
