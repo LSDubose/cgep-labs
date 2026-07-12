@@ -37,6 +37,9 @@ jobs:
           curl -fsSL https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz \
             | tar -xz -C /usr/local/bin conftest
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Terraform plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
@@ -104,10 +107,29 @@ jobs:
           cp ${{ env.TF_WORKING_DIR }}/plan.json evidence/plan.json
           cp ${{ env.TF_WORKING_DIR }}/plan.txt  evidence/plan.txt
 
+      - name: Bundle and sign evidence
+        if: always()
+        env:
+          VAULT: ${{ vars.EVIDENCE_VAULT }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          BUNDLE="evidence-${RUN_ID}-${SHA}.tar.gz"
+          tar czf "${BUNDLE}" evidence/
+          sha256sum "${BUNDLE}" | awk '{print $1}' > "${BUNDLE}.sha256"
+          cosign sign-blob --yes --bundle "${BUNDLE}.sig.bundle" "${BUNDLE}"
+          aws s3 cp "${BUNDLE}" "s3://${VAULT}/runs/${RUN_ID}/${BUNDLE}"
+          aws s3 cp "${BUNDLE}.sha256" "s3://${VAULT}/runs/${RUN_ID}/${BUNDLE}.sha256"
+          aws s3 cp "${BUNDLE}.sig.bundle" "s3://${VAULT}/runs/${RUN_ID}/${BUNDLE}.sig.bundle"
+
       - name: Upload evidence artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: grc-evidence-${{ github.run_id }}
-          path: evidence/
+          path: |
+            evidence/
+            evidence-*.tar.gz
+            evidence-*.tar.gz.sha256
+            evidence-*.sig.bundle
           retention-days: 90
